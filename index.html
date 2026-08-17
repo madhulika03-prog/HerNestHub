@@ -976,9 +976,9 @@
               <details style="margin-top:12px;">
                 <summary style="cursor:pointer; color:var(--brass); font-weight:600;">Terms &amp; Conditions</summary>
                 <div style="max-height:220px; overflow-y:auto; margin-top:10px; padding:12px; background:var(--surface); border:1px solid var(--border); border-radius:8px; font-size:0.85rem; color:var(--text-soft); line-height:1.6;">
-                  <p><strong>1. Booking &amp; Deposit.</strong> A booking is confirmed only after the deposit and first month's rent are received in full.</p>
+                  <p><strong>1. Booking &amp; Deposit.</strong> A booking is confirmed only after the deposit and rent are received in full. For day-wise stays, the ₹3,500 deposit consists of a ₹500 non-refundable maintenance fee and a ₹3,000 refundable security deposit, returned when the resident leaves the PG (subject to deduction for damages or dues).</p>
                   <p><strong>2. ID Verification.</strong> A valid government ID (Aadhar or PAN) is required to confirm identity before a booking is finalized. Documents are stored securely and used solely for verification.</p>
-                  <p><strong>3. No Refunds.</strong> Once a payment is confirmed, it is final and non-refundable, including in the case of cancellation, under any circumstances.</p>
+                  <p><strong>3. No Refunds.</strong> All payments (rent, visit fees, and the ₹500 maintenance portion of the day-wise deposit) are final and non-refundable once confirmed, including in the case of cancellation. The ₹3,000 refundable portion of the day-wise deposit is the only exception, returned as described above.</p>
                   <p><strong>4. House Rules.</strong> Residents agree to abide by HerNest Hub's house rules, including visiting hours, guest policy, and shared-space conduct, as communicated at move-in.</p>
                   <p><strong>5. Rent.</strong> Monthly rent is due in advance on the agreed date each month. Late payments may attract additional charges as per house policy.</p>
                   <p><strong>6. Changes.</strong> HerNest Hub may update these terms from time to time; residents will be notified of material changes.</p>
@@ -1318,7 +1318,7 @@
       var nights = countNights();
       var total = DAILY_DEPOSIT + (nights * DAILY_RATE);
       submitBtn.textContent = nights ? ("Pay ₹" + total.toLocaleString("en-IN") + " & Book This Room") : "Continue to Payment";
-      formHint.textContent = "₹3,500 deposit + ₹800/day, paid securely via Razorpay.";
+      formHint.textContent = "₹800/day + ₹3,500 deposit (₹500 maintenance, ₹3,000 refundable on leaving), paid securely via Razorpay.";
     } else if (isBooking) {
       var price = roomPrices[val];
       var monthlyTotal = price ? (5000 + price) : null;
