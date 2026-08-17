@@ -3,6 +3,8 @@ const { createClient } = require('@supabase/supabase-js');
 
 const VISIT_FEE = 200;
 const DEPOSIT = 5000;
+const DAILY_RATE = 800;
+const DAILY_DEPOSIT = 3500;
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -14,21 +16,28 @@ module.exports = async function handler(req, res) {
       key_secret: process.env.RAZORPAY_KEY_SECRET
     });
 
-    const { purpose, roomType } = req.body;
+    const { purpose, roomType, stayType, days } = req.body;
     let amount;
 
     if (purpose === 'visit_fee') {
       amount = VISIT_FEE;
     } else if (purpose === 'booking') {
       if (!roomType) return res.status(400).json({ error: 'Missing roomType' });
-      const { data: pkg, error } = await supabase
-        .from('packages')
-        .select('price')
-        .eq('name', roomType)
-        .limit(1)
-        .maybeSingle();
-      if (error || !pkg) return res.status(400).json({ error: 'Unknown room type' });
-      amount = DEPOSIT + Number(pkg.price);
+
+      if (stayType === 'daily') {
+        const numDays = Number(days);
+        if (!numDays || numDays < 1) return res.status(400).json({ error: 'Invalid number of days' });
+        amount = DAILY_DEPOSIT + (numDays * DAILY_RATE);
+      } else {
+        const { data: pkg, error } = await supabase
+          .from('packages')
+          .select('price')
+          .eq('name', roomType)
+          .limit(1)
+          .maybeSingle();
+        if (error || !pkg) return res.status(400).json({ error: 'Unknown room type' });
+        amount = DEPOSIT + Number(pkg.price);
+      }
     } else {
       return res.status(400).json({ error: 'Invalid purpose' });
     }

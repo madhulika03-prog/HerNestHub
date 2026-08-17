@@ -69,8 +69,10 @@ module.exports = async function handler(req, res) {
         .insert([{
           customer_id: customerId,
           room_id: booking.room_id,
-          package_id: booking.package_id,
+          package_id: booking.package_id || null,
           move_in_date: booking.move_in_date,
+          check_out_date: booking.check_out_date || null,
+          stay_type: booking.stay_type || 'monthly',
           notes: booking.notes,
           id_document_path: idDocumentPath,
           terms_accepted: true

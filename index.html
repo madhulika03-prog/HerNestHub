@@ -941,9 +941,26 @@
                   <option>Triple Sharing</option>
                 </select>
               </div>
-              <div class="field">
+              <div class="field" id="visitDateField">
                 <label for="visitDate">Preferred Visit Date</label>
                 <input id="visitDate" name="visitDate" type="date" />
+              </div>
+              <div class="field" id="stayTypeField" style="display:none;">
+                <label for="stayType">Stay Type</label>
+                <select id="stayType" name="stayType">
+                  <option value="monthly">Monthly (deposit + 1 month rent)</option>
+                  <option value="daily">Day-wise — ₹800/day (deposit ₹3,500)</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-row" id="stayDatesRow" style="display:none;">
+              <div class="field">
+                <label for="checkInDate">Check-in Date</label>
+                <input id="checkInDate" name="checkInDate" type="date" />
+              </div>
+              <div class="field">
+                <label for="checkOutDate">Check-out Date</label>
+                <input id="checkOutDate" name="checkOutDate" type="date" />
               </div>
             </div>
             <div class="field">
@@ -1260,24 +1277,52 @@
   var form = document.getElementById("enquiryForm");
   var success = document.getElementById("formSuccess");
   var roomTypeSelect = document.getElementById("roomType");
+  var stayTypeField = document.getElementById("stayTypeField");
+  var stayTypeSelect = document.getElementById("stayType");
+  var visitDateField = document.getElementById("visitDateField");
+  var stayDatesRow = document.getElementById("stayDatesRow");
+  var checkInInput = document.getElementById("checkInDate");
+  var checkOutInput = document.getElementById("checkOutDate");
   var bookingExtra = document.getElementById("bookingExtra");
   var idDocumentInput = document.getElementById("idDocument");
   var termsAcceptInput = document.getElementById("termsAccept");
   var submitBtn = document.getElementById("submitBtn");
   var formHint = document.getElementById("formHint");
   var roomPrices = {};
+  var DAILY_RATE = 800;
+  var DAILY_DEPOSIT = 3500;
+
+  function countNights() {
+    if (!checkInInput.value || !checkOutInput.value) return 0;
+    var inDate = new Date(checkInInput.value);
+    var outDate = new Date(checkOutInput.value);
+    var days = Math.round((outDate - inDate) / 86400000);
+    return days > 0 ? days : 0;
+  }
 
   function updateFormForRoomType() {
     var val = roomTypeSelect.value;
     var isBooking = val && val !== "Not sure yet";
+    var isDaily = isBooking && stayTypeSelect.value === "daily";
+
     bookingExtra.style.display = isBooking ? "block" : "none";
     idDocumentInput.required = isBooking;
     termsAcceptInput.required = isBooking;
+    stayTypeField.style.display = isBooking ? "block" : "none";
+    visitDateField.style.display = isDaily ? "none" : "block";
+    stayDatesRow.style.display = isDaily ? "grid" : "none";
+    checkInInput.required = isDaily;
+    checkOutInput.required = isDaily;
 
-    if (isBooking) {
+    if (isDaily) {
+      var nights = countNights();
+      var total = DAILY_DEPOSIT + (nights * DAILY_RATE);
+      submitBtn.textContent = nights ? ("Pay ₹" + total.toLocaleString("en-IN") + " & Book This Room") : "Continue to Payment";
+      formHint.textContent = "₹3,500 deposit + ₹800/day, paid securely via Razorpay.";
+    } else if (isBooking) {
       var price = roomPrices[val];
-      var total = price ? (5000 + price) : null;
-      submitBtn.textContent = total ? ("Pay ₹" + total.toLocaleString("en-IN") + " & Book This Room") : "Continue to Payment";
+      var monthlyTotal = price ? (5000 + price) : null;
+      submitBtn.textContent = monthlyTotal ? ("Pay ₹" + monthlyTotal.toLocaleString("en-IN") + " & Book This Room") : "Continue to Payment";
       formHint.textContent = "₹5,000 deposit + 1 month rent, paid securely via Razorpay.";
     } else {
       submitBtn.textContent = "Pay ₹200 & Request a Visit";
@@ -1292,6 +1337,9 @@
     }
   });
   roomTypeSelect.addEventListener("change", updateFormForRoomType);
+  stayTypeSelect.addEventListener("change", updateFormForRoomType);
+  checkInInput.addEventListener("change", updateFormForRoomType);
+  checkOutInput.addEventListener("change", updateFormForRoomType);
   updateFormForRoomType();
 
   document.querySelectorAll("[data-book]").forEach(function (btn) {
@@ -1353,9 +1401,18 @@
 
     try {
       if (isBooking) {
+        var isDaily = stayTypeSelect.value === "daily";
         var idFile = idDocumentInput.files[0];
         if (!idFile) throw new Error("Please upload your Aadhar or PAN as ID proof to continue.");
         if (!termsAcceptInput.checked) throw new Error("Please accept the Terms & Conditions to continue.");
+
+        var nights = 0;
+        if (isDaily) {
+          nights = countNights();
+          if (!checkInInput.value || !checkOutInput.value || nights < 1) {
+            throw new Error("Please select a valid check-in and check-out date.");
+          }
+        }
 
         var fileExt = idFile.name.split(".").pop();
         var filePath = "id-" + Date.now() + "-" + Math.random().toString(36).slice(2) + "." + fileExt;
@@ -1363,17 +1420,25 @@
         if (uploadResult.error) throw uploadResult.error;
 
         var roomResult = await window.hernestDb.from("rooms").select("id").eq("name", roomType).limit(1).maybeSingle();
-        var pkgResult = await window.hernestDb.from("packages").select("id").eq("name", roomType).limit(1).maybeSingle();
+        var pkgResult = isDaily ? { data: null } : await window.hernestDb.from("packages").select("id").eq("name", roomType).limit(1).maybeSingle();
 
         var orderRes = await fetch("/api/create-order", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ purpose: "booking", roomType: roomType })
+          body: JSON.stringify(
+            isDaily
+              ? { purpose: "booking", roomType: roomType, stayType: "daily", days: nights }
+              : { purpose: "booking", roomType: roomType, stayType: "monthly" }
+          )
         });
         var order = await orderRes.json();
         if (!orderRes.ok) throw new Error(order.error || "Could not start payment");
 
-        var paymentResult = await openRazorpayCheckout(order, roomType + " — Deposit + 1 Month Rent", {
+        var description = isDaily
+          ? (roomType + " — " + nights + " Night(s) Day-wise Stay")
+          : (roomType + " — Deposit + 1 Month Rent");
+
+        var paymentResult = await openRazorpayCheckout(order, description, {
           name: payload.name, email: payload.email, contact: payload.phone
         });
 
@@ -1391,7 +1456,9 @@
               name: payload.name, email: payload.email, phone: payload.phone,
               room_id: roomResult.data ? roomResult.data.id : null,
               package_id: pkgResult.data ? pkgResult.data.id : null,
-              move_in_date: payload.visit_datetime,
+              move_in_date: isDaily ? checkInInput.value : payload.visit_datetime,
+              check_out_date: isDaily ? checkOutInput.value : null,
+              stay_type: isDaily ? "daily" : "monthly",
               notes: payload.message
             }
           })
