@@ -27,7 +27,7 @@ module.exports = async function handler(req, res) {
         .eq('name', roomType)
         .limit(1)
         .maybeSingle();
-      if (error || !pkg) return res.status(400).json({ error: 'Unknown room type', debug: error ? error.message : 'no row found', roomType, hasUrl: !!process.env.SUPABASE_URL, hasKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY });
+      if (error || !pkg) return res.status(400).json({ error: 'Unknown room type' });
       amount = DEPOSIT + Number(pkg.price);
     } else {
       return res.status(400).json({ error: 'Invalid purpose' });
