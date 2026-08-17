@@ -1031,6 +1031,15 @@
   <button class="lightbox-nav next" id="lightboxNext" type="button" aria-label="Next image"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 18l6-6-6-6"/></svg></button>
 </div>
 
+<!-- Supabase client: connects the site directly to the HerNest Hub database -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>
+  window.hernestDb = window.supabase.createClient(
+    "https://pcrdsubnszwkppcamupf.supabase.co",
+    "sb_publishable_IF4Q_z3XpsCIIV8qE-D6Ng_XTC8Cwen"
+  );
+</script>
+
 <script>
 (function () {
   "use strict";
@@ -1237,14 +1246,65 @@
 
   var form = document.getElementById("enquiryForm");
   var success = document.getElementById("formSuccess");
-  form.addEventListener("submit", function (e) {
+  form.addEventListener("submit", async function (e) {
     e.preventDefault();
     if (!form.checkValidity()) {
       form.reportValidity();
       return;
     }
-    form.classList.add("hide");
-    success.classList.add("show");
+
+    var formData = new FormData(form);
+    var roomType = formData.get('roomType');
+    var payload = {
+      name: formData.get('fullName'),
+      email: formData.get('email'),
+      phone: formData.get('phone'),
+      visit_datetime: formData.get('visitDate') || null,
+      message: formData.get('message') || ''
+    };
+
+    try {
+      if (roomType && roomType !== 'Not sure yet') {
+        // A specific room was picked — create a real booking
+        // (customer id is generated here, not read back, since customers has no public read policy)
+        var customerId = crypto.randomUUID();
+        var custResult = await window.hernestDb
+          .from('customers')
+          .insert([{ id: customerId, name: payload.name, email: payload.email, phone: payload.phone }]);
+        if (custResult.error) throw custResult.error;
+
+        var roomResult = await window.hernestDb
+          .from('rooms').select('id').eq('name', roomType).limit(1).maybeSingle();
+
+        var pkgResult = await window.hernestDb
+          .from('packages').select('id').eq('name', roomType).limit(1).maybeSingle();
+
+        var bookingResult = await window.hernestDb.from('bookings').insert([{
+          customer_id: customerId,
+          room_id: roomResult.data ? roomResult.data.id : null,
+          package_id: pkgResult.data ? pkgResult.data.id : null,
+          move_in_date: payload.visit_datetime,
+          notes: payload.message
+        }]);
+        if (bookingResult.error) throw bookingResult.error;
+      } else {
+        // No specific room chosen — general visit inquiry
+        var visitResult = await window.hernestDb.from('pg_visit_requests').insert([{
+          customer_name: payload.name,
+          email: payload.email,
+          phone: payload.phone,
+          visit_datetime: payload.visit_datetime,
+          message: payload.message
+        }]);
+        if (visitResult.error) throw visitResult.error;
+      }
+
+      form.classList.add("hide");
+      success.classList.add("show");
+    } catch (err) {
+      console.error('Submission failed', err);
+      alert('Sorry — we could not submit your request. Please try again later.');
+    }
   });
 })();
 </script>
