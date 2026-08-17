@@ -950,8 +950,32 @@
               <label for="message">Message</label>
               <textarea id="message" name="message" placeholder="Anything you'd like us to know?"></textarea>
             </div>
-            <button type="submit" class="btn btn-primary btn-block">Request a Visit</button>
-            <p class="form-note">We usually respond within 24 hours.</p>
+
+            <div class="field" id="bookingExtra" style="display:none; border:1px solid var(--border); border-radius:12px; padding:16px; margin-top:8px;">
+              <label for="idDocument">Upload ID Proof (Aadhar or PAN)</label>
+              <input id="idDocument" name="idDocument" type="file" accept="image/*,application/pdf" />
+              <p class="form-note" style="margin-top:6px;">Used only to verify your identity before booking. Stored securely and never shared publicly.</p>
+
+              <details style="margin-top:12px;">
+                <summary style="cursor:pointer; color:var(--brass); font-weight:600;">Terms &amp; Conditions</summary>
+                <div style="max-height:220px; overflow-y:auto; margin-top:10px; padding:12px; background:var(--surface); border:1px solid var(--border); border-radius:8px; font-size:0.85rem; color:var(--text-soft); line-height:1.6;">
+                  <p><strong>1. Booking &amp; Deposit.</strong> A booking is confirmed only after the deposit and first month's rent are received in full. The deposit is refundable on move-out, subject to deduction for damages or dues, as per house policy.</p>
+                  <p><strong>2. ID Verification.</strong> A valid government ID (Aadhar or PAN) is required to confirm identity before a booking is finalized. Documents are stored securely and used solely for verification.</p>
+                  <p><strong>3. Cancellation.</strong> Cancellations made at least 7 days before the move-in date are eligible for a full deposit refund. Cancellations within 7 days of move-in may forfeit part or all of the deposit.</p>
+                  <p><strong>4. House Rules.</strong> Residents agree to abide by HerNest Hub's house rules, including visiting hours, guest policy, and shared-space conduct, as communicated at move-in.</p>
+                  <p><strong>5. Rent.</strong> Monthly rent is due in advance on the agreed date each month. Late payments may attract additional charges as per house policy.</p>
+                  <p><strong>6. Changes.</strong> HerNest Hub may update these terms from time to time; residents will be notified of material changes.</p>
+                  <p style="margin-top:10px; color:var(--text-faint);">This is a general draft and not a substitute for a formal rental agreement or legal review.</p>
+                </div>
+              </details>
+              <label style="display:flex; align-items:flex-start; gap:8px; margin-top:12px; font-size:0.9rem; cursor:pointer;">
+                <input id="termsAccept" name="termsAccept" type="checkbox" style="margin-top:3px;" />
+                <span>I have read and agree to the Terms &amp; Conditions</span>
+              </label>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-block" id="submitBtn">Request a Visit</button>
+            <p class="form-note" id="formHint">We usually respond within 24 hours.</p>
           </form>
           <div class="form-success" id="formSuccess">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="m8 12.5 2.5 2.5L16 9.5"/></svg>
@@ -1039,6 +1063,9 @@
     "sb_publishable_IF4Q_z3XpsCIIV8qE-D6Ng_XTC8Cwen"
   );
 </script>
+
+<!-- Razorpay checkout widget -->
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 
 <script>
 (function () {
@@ -1230,13 +1257,50 @@
     if (e.key === "ArrowRight") lightboxNext.click();
   });
 
+  var form = document.getElementById("enquiryForm");
+  var success = document.getElementById("formSuccess");
+  var roomTypeSelect = document.getElementById("roomType");
+  var bookingExtra = document.getElementById("bookingExtra");
+  var idDocumentInput = document.getElementById("idDocument");
+  var termsAcceptInput = document.getElementById("termsAccept");
+  var submitBtn = document.getElementById("submitBtn");
+  var formHint = document.getElementById("formHint");
+  var roomPrices = {};
+
+  function updateFormForRoomType() {
+    var val = roomTypeSelect.value;
+    var isBooking = val && val !== "Not sure yet";
+    bookingExtra.style.display = isBooking ? "block" : "none";
+    idDocumentInput.required = isBooking;
+    termsAcceptInput.required = isBooking;
+
+    if (isBooking) {
+      var price = roomPrices[val];
+      var total = price ? (5000 + price) : null;
+      submitBtn.textContent = total ? ("Pay ₹" + total.toLocaleString("en-IN") + " & Book This Room") : "Continue to Payment";
+      formHint.textContent = "₹5,000 deposit + 1 month rent, paid securely via Razorpay.";
+    } else {
+      submitBtn.textContent = "Pay ₹200 & Request a Visit";
+      formHint.textContent = "₹200 visit fee, paid securely via Razorpay.";
+    }
+  }
+
+  window.hernestDb.from("packages").select("name, price").then(function (res) {
+    if (res.data) {
+      res.data.forEach(function (p) { roomPrices[p.name] = Number(p.price); });
+      updateFormForRoomType();
+    }
+  });
+  roomTypeSelect.addEventListener("change", updateFormForRoomType);
+  updateFormForRoomType();
+
   document.querySelectorAll("[data-book]").forEach(function (btn) {
     btn.addEventListener("click", function () {
-      var roomSelect = document.getElementById("roomType");
       var wanted = btn.getAttribute("data-book");
-      Array.prototype.slice.call(roomSelect.options).forEach(function (opt, i) {
-        if (opt.text === wanted) roomSelect.selectedIndex = i;
+      Array.prototype.slice.call(roomTypeSelect.options).forEach(function (opt, i) {
+        if (opt.text === wanted) roomTypeSelect.selectedIndex = i;
       });
+      updateFormForRoomType();
       scrollToId("contact");
       window.setTimeout(function () {
         document.getElementById("fullName").focus();
@@ -1244,8 +1308,27 @@
     });
   });
 
-  var form = document.getElementById("enquiryForm");
-  var success = document.getElementById("formSuccess");
+  function openRazorpayCheckout(order, description, prefill) {
+    return new Promise(function (resolve, reject) {
+      var rzp = new Razorpay({
+        key: order.keyId,
+        amount: order.amount,
+        currency: "INR",
+        name: "HerNest Hub",
+        description: description,
+        order_id: order.orderId,
+        prefill: prefill,
+        theme: { color: "#7D2C46" },
+        handler: function (response) { resolve(response); },
+        modal: { ondismiss: function () { reject(new Error("Payment cancelled")); } }
+      });
+      rzp.on("payment.failed", function (response) {
+        reject(new Error((response.error && response.error.description) || "Payment failed"));
+      });
+      rzp.open();
+    });
+  }
+
   form.addEventListener("submit", async function (e) {
     e.preventDefault();
     if (!form.checkValidity()) {
@@ -1254,56 +1337,105 @@
     }
 
     var formData = new FormData(form);
-    var roomType = formData.get('roomType');
+    var roomType = formData.get("roomType");
+    var isBooking = roomType && roomType !== "Not sure yet";
     var payload = {
-      name: formData.get('fullName'),
-      email: formData.get('email'),
-      phone: formData.get('phone'),
-      visit_datetime: formData.get('visitDate') || null,
-      message: formData.get('message') || ''
+      name: formData.get("fullName"),
+      email: formData.get("email"),
+      phone: formData.get("phone"),
+      visit_datetime: formData.get("visitDate") || null,
+      message: formData.get("message") || ""
     };
 
+    var originalBtnText = submitBtn.textContent;
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Processing...";
+
     try {
-      if (roomType && roomType !== 'Not sure yet') {
-        // A specific room was picked — create a real booking
-        // (customer id is generated here, not read back, since customers has no public read policy)
-        var customerId = crypto.randomUUID();
-        var custResult = await window.hernestDb
-          .from('customers')
-          .insert([{ id: customerId, name: payload.name, email: payload.email, phone: payload.phone }]);
-        if (custResult.error) throw custResult.error;
+      if (isBooking) {
+        var idFile = idDocumentInput.files[0];
+        if (!idFile) throw new Error("Please upload your Aadhar or PAN as ID proof to continue.");
+        if (!termsAcceptInput.checked) throw new Error("Please accept the Terms & Conditions to continue.");
 
-        var roomResult = await window.hernestDb
-          .from('rooms').select('id').eq('name', roomType).limit(1).maybeSingle();
+        var fileExt = idFile.name.split(".").pop();
+        var filePath = "id-" + Date.now() + "-" + Math.random().toString(36).slice(2) + "." + fileExt;
+        var uploadResult = await window.hernestDb.storage.from("id-documents").upload(filePath, idFile);
+        if (uploadResult.error) throw uploadResult.error;
 
-        var pkgResult = await window.hernestDb
-          .from('packages').select('id').eq('name', roomType).limit(1).maybeSingle();
+        var roomResult = await window.hernestDb.from("rooms").select("id").eq("name", roomType).limit(1).maybeSingle();
+        var pkgResult = await window.hernestDb.from("packages").select("id").eq("name", roomType).limit(1).maybeSingle();
 
-        var bookingResult = await window.hernestDb.from('bookings').insert([{
-          customer_id: customerId,
-          room_id: roomResult.data ? roomResult.data.id : null,
-          package_id: pkgResult.data ? pkgResult.data.id : null,
-          move_in_date: payload.visit_datetime,
-          notes: payload.message
-        }]);
-        if (bookingResult.error) throw bookingResult.error;
+        var orderRes = await fetch("/api/create-order", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ purpose: "booking", roomType: roomType })
+        });
+        var order = await orderRes.json();
+        if (!orderRes.ok) throw new Error(order.error || "Could not start payment");
+
+        var paymentResult = await openRazorpayCheckout(order, roomType + " — Deposit + 1 Month Rent", {
+          name: payload.name, email: payload.email, contact: payload.phone
+        });
+
+        var verifyRes = await fetch("/api/verify-payment", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            razorpay_order_id: paymentResult.razorpay_order_id,
+            razorpay_payment_id: paymentResult.razorpay_payment_id,
+            razorpay_signature: paymentResult.razorpay_signature,
+            purpose: "booking",
+            amount: order.amount / 100,
+            idDocumentPath: filePath,
+            booking: {
+              name: payload.name, email: payload.email, phone: payload.phone,
+              room_id: roomResult.data ? roomResult.data.id : null,
+              package_id: pkgResult.data ? pkgResult.data.id : null,
+              move_in_date: payload.visit_datetime,
+              notes: payload.message
+            }
+          })
+        });
+        var verify = await verifyRes.json();
+        if (!verifyRes.ok || !verify.success) throw new Error(verify.error || "Payment verification failed");
       } else {
-        // No specific room chosen — general visit inquiry
-        var visitResult = await window.hernestDb.from('pg_visit_requests').insert([{
-          customer_name: payload.name,
-          email: payload.email,
-          phone: payload.phone,
-          visit_datetime: payload.visit_datetime,
-          message: payload.message
-        }]);
-        if (visitResult.error) throw visitResult.error;
+        var orderRes2 = await fetch("/api/create-order", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ purpose: "visit_fee" })
+        });
+        var order2 = await orderRes2.json();
+        if (!orderRes2.ok) throw new Error(order2.error || "Could not start payment");
+
+        var paymentResult2 = await openRazorpayCheckout(order2, "PG Visit Fee", {
+          name: payload.name, email: payload.email, contact: payload.phone
+        });
+
+        var verifyRes2 = await fetch("/api/verify-payment", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            razorpay_order_id: paymentResult2.razorpay_order_id,
+            razorpay_payment_id: paymentResult2.razorpay_payment_id,
+            razorpay_signature: paymentResult2.razorpay_signature,
+            purpose: "visit_fee",
+            amount: order2.amount / 100,
+            visit: payload
+          })
+        });
+        var verify2 = await verifyRes2.json();
+        if (!verifyRes2.ok || !verify2.success) throw new Error(verify2.error || "Payment verification failed");
       }
 
       form.classList.add("hide");
       success.classList.add("show");
     } catch (err) {
-      console.error('Submission failed', err);
-      alert('Sorry — we could not submit your request. Please try again later.');
+      console.error("Submission failed", err);
+      var msg = err && err.message;
+      alert(msg && msg !== "Payment cancelled" ? ("Sorry — " + msg) : "Payment was not completed. Please try again.");
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = originalBtnText;
     }
   });
 })();
