@@ -951,6 +951,7 @@
                   <option value="monthly">Monthly (deposit + 1 month rent)</option>
                   <option value="daily">Day-wise — ₹800/day (deposit ₹3,500)</option>
                 </select>
+                <p id="dailyPriceNote" style="display:none; margin-top:6px; font-size:0.72rem; line-height:1.5; color:var(--text-faint);">₹800/day. The ₹3,500 deposit is <strong>not</strong> fully refundable — ₹500 is a maintenance fee (non-refundable) and ₹3,000 is refunded when you leave the PG.</p>
               </div>
             </div>
             <div class="form-row" id="stayDatesRow" style="display:none;">
@@ -1288,6 +1289,7 @@
   var termsAcceptInput = document.getElementById("termsAccept");
   var submitBtn = document.getElementById("submitBtn");
   var formHint = document.getElementById("formHint");
+  var dailyPriceNote = document.getElementById("dailyPriceNote");
   var roomPrices = {};
   var DAILY_RATE = 800;
   var DAILY_DEPOSIT = 3500;
@@ -1309,6 +1311,7 @@
     idDocumentInput.required = isBooking;
     termsAcceptInput.required = isBooking;
     stayTypeField.style.display = isBooking ? "block" : "none";
+    dailyPriceNote.style.display = isDaily ? "block" : "none";
     visitDateField.style.display = isDaily ? "none" : "block";
     stayDatesRow.style.display = isDaily ? "grid" : "none";
     checkInInput.required = isDaily;
