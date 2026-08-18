@@ -1092,23 +1092,42 @@
 (function () {
   "use strict";
 
-  window.hernestDb.from("beds").select("sharing_type, is_available").then(function (res) {
+  window.hernestDb.from("beds").select("sharing_type, room_number, is_available").then(function (res) {
     if (!res.data) return;
-    var counts = {};
+
+    var bedCounts = {};
+    var rooms = {};
+
     res.data.forEach(function (bed) {
-      if (!counts[bed.sharing_type]) counts[bed.sharing_type] = { total: 0, available: 0 };
-      counts[bed.sharing_type].total++;
-      if (bed.is_available) counts[bed.sharing_type].available++;
+      if (!bedCounts[bed.sharing_type]) bedCounts[bed.sharing_type] = { total: 0, available: 0 };
+      bedCounts[bed.sharing_type].total++;
+      if (bed.is_available) bedCounts[bed.sharing_type].available++;
+
+      var roomKey = bed.sharing_type + "|" + bed.room_number;
+      if (!rooms[roomKey]) rooms[roomKey] = { type: bed.sharing_type, allFree: true };
+      if (!bed.is_available) rooms[roomKey].allFree = false;
     });
+
+    var roomVacancy = {};
+    Object.keys(rooms).forEach(function (key) {
+      var r = rooms[key];
+      if (!roomVacancy[r.type]) roomVacancy[r.type] = { total: 0, vacant: 0 };
+      roomVacancy[r.type].total++;
+      if (r.allFree) roomVacancy[r.type].vacant++;
+    });
+
     document.querySelectorAll("[data-availability]").forEach(function (el) {
       var type = el.getAttribute("data-availability");
-      var c = counts[type];
-      if (!c) { el.textContent = ""; return; }
-      if (c.available === 0) {
+      var beds = bedCounts[type];
+      var roomsForType = roomVacancy[type];
+      if (!beds || !roomsForType) { el.textContent = ""; return; }
+
+      if (beds.available === 0) {
         el.textContent = "Fully booked";
         el.style.color = "var(--wine)";
       } else {
-        el.textContent = c.available + " of " + c.total + " rooms available";
+        el.textContent = beds.available + " of " + beds.total + " beds available · " +
+          roomsForType.vacant + " of " + roomsForType.total + " rooms fully vacant";
         el.style.color = "var(--text-soft)";
       }
     });
