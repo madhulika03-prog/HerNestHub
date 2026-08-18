@@ -584,6 +584,7 @@
               <span class="room-tag">TV</span>
               <span class="room-tag">Attached Bath</span>
             </div>
+            <p class="room-availability" data-availability="Single Sharing" style="font-size:0.85rem; color:var(--text-soft); margin:0 0 4px;">Checking availability…</p>
             <button class="btn btn-outline btn-block" data-book="Single Sharing">Book This Room</button>
           </div>
         </article>
@@ -625,6 +626,7 @@
               <span class="room-tag">Shared Wardrobe</span>
               <span class="room-tag">TV</span>
             </div>
+            <p class="room-availability" data-availability="Double Sharing" style="font-size:0.85rem; color:var(--text-soft); margin:0 0 4px;">Checking availability…</p>
             <button class="btn btn-outline btn-block" data-book="Double Sharing">Book This Room</button>
           </div>
         </article>
@@ -666,6 +668,7 @@
               <span class="room-tag">3 Wardrobes</span>
               <span class="room-tag">Shared TV</span>
             </div>
+            <p class="room-availability" data-availability="Triple Sharing" style="font-size:0.85rem; color:var(--text-soft); margin:0 0 4px;">Checking availability…</p>
             <button class="btn btn-outline btn-block" data-book="Triple Sharing">Book This Room</button>
           </div>
         </article>
@@ -1088,6 +1091,28 @@
 <script>
 (function () {
   "use strict";
+
+  window.hernestDb.from("beds").select("sharing_type, is_available").then(function (res) {
+    if (!res.data) return;
+    var counts = {};
+    res.data.forEach(function (bed) {
+      if (!counts[bed.sharing_type]) counts[bed.sharing_type] = { total: 0, available: 0 };
+      counts[bed.sharing_type].total++;
+      if (bed.is_available) counts[bed.sharing_type].available++;
+    });
+    document.querySelectorAll("[data-availability]").forEach(function (el) {
+      var type = el.getAttribute("data-availability");
+      var c = counts[type];
+      if (!c) { el.textContent = ""; return; }
+      if (c.available === 0) {
+        el.textContent = "Fully booked";
+        el.style.color = "var(--wine)";
+      } else {
+        el.textContent = c.available + " of " + c.total + " rooms available";
+        el.style.color = "var(--text-soft)";
+      }
+    });
+  });
 
   var header = document.getElementById("siteHeader");
   var onScroll = function () {
